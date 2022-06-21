@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+
+import argparse
+import collections
+import enum
+import qrcode
+import re
+import sys
+
+def escape_semi(s):
+    return s.replace(';', '\\;')
+
+class WifiProfile:
+    class Security(enum.Enum):
+        WEP = 'wep'
+        WPA = 'wpa'
+
+    def __init__(self, name, password, security, hidden):
+        self.name = name
+        self.password = password
+        self.security = security
+        self.hidden = hidden
+
+    def __str__(self):
+        d = collections.OrderedDict(zip('STPH', [
+            self.name,
+            self.security.value.upper() if self.security is not None else None,
+            self.password,
+            str(self.hidden).lower() if self.hidden is not None else None,
+            ]))
+        s = ''.join(f'{k}:{escape_semi(v)};' for k, v in d.items() if v is not None)
+        return f'WIFI:{s};'
+
+class NetctlProfile:
+    def __init__(self, security, essid, key, hidden):
+        self.security = security
+        self.essid = essid
+        self.key = key
+        self.hidden = hidden
+
+    def to_wifi_profile(self):
+        security = {
+                'none': None,
+                'wep': WifiProfile.Security.WEP,
+                'wpa': WifiProfile.Security.WPA,
+                }[re.sub('-.+', '', self.security)]
+        hidden = {
+                None: None,
+                'yes': True,
+                'no': False,
+                }[self.hidden]
+        return WifiProfile(self.essid, self.key, security, hidden)
+
+    @classmethod
+    def from_file(cls, file):
+        results = collections.OrderedDict.fromkeys([
+            re.compile(r) for r in
+                (
+                    r'^Security=(.+)$',
+                    r'^ESSID=(.+)$',
+                    r'^Key=(.+)$',
+                    r'^Hidden=(.+)$',
+                )])
+
+        for line in file:
+            line = line.strip()
+
+            for r in results:
+                if m := r.fullmatch(line):
+                    results[r] = m.group(1)
+
+        return cls(*results.values())
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--read', '-r', default=sys.stdin, type=argparse.FileType('r'))
+    parser.add_argument('--output', '-o')
+
+    args = parser.parse_args()
+
+    np = NetctlProfile.from_file(args.read)
+
+    qr = qrcode.QRCode()
+    qr.add_data(str(np.to_wifi_profile()))
+
+    if args.output:
+        img = qr.make_image()
+        img.save(args.output)
+    else:
+        qr.print_tty()
+
+if __name__ == '__main__':
+    main()
