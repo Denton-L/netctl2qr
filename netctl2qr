@@ -5,10 +5,11 @@ import collections
 import enum
 import qrcode
 import re
+import shlex
 import sys
 
 def escape_semi(s):
-    return s.replace(';', '\\;')
+    return s.replace(';', '\\;').replace('\\', '\\\\')
 
 class WifiProfile:
     class Security(enum.Enum):
@@ -53,23 +54,9 @@ class NetctlProfile:
 
     @classmethod
     def from_file(cls, file):
-        results = collections.OrderedDict.fromkeys([
-            re.compile(r) for r in
-                (
-                    r'^Security=(.+)$',
-                    r'^ESSID=(.+)$',
-                    r'^Key=(.+)$',
-                    r'^Hidden=(.+)$',
-                )])
-
-        for line in file:
-            line = line.strip()
-
-            for r in results:
-                if m := r.fullmatch(line):
-                    results[r] = m.group(1)
-
-        return cls(*results.values())
+        data = file.read()
+        results = {k: v for k, _, v in (line.partition('=') for line in shlex.split(data))}
+        return cls(*(results.get(k) for k in ('Security', 'ESSID', 'Key', 'Hidden')))
 
 
 def main():
