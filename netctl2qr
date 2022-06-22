@@ -55,8 +55,8 @@ class NetctlProfile:
     @classmethod
     def from_file(cls, file):
         data = file.read()
-        results = {k: v for k, _, v in (line.partition('=') for line in shlex.split(data))}
-        return cls(*(results.get(k) for k in ('Security', 'ESSID', 'Key', 'Hidden')))
+        settings = {k: v for k, e, v in (line.partition('=') for line in shlex.split(data)) if e == '='}
+        return cls(*(settings.get(k) for k in ('Security', 'ESSID', 'Key', 'Hidden')))
 
 
 def main():
